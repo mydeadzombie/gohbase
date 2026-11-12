@@ -840,6 +840,54 @@ func BenchmarkPrometheusWith(b *testing.B) {
 	}
 }
 
+func TestSendBatchRetryRoutingFailure(t *testing.T) {
+	ctrl := test.NewController(t)
+	defer ctrl.Finish()
+	c := newMockClient(nil)
+	c.done = make(chan struct{})
+	reg := region.NewInfo(1, nil, []byte("test"), []byte("test,,1"), nil, nil)
+	rc := mockRegion.NewMockRegionClient(ctrl)
+	reg.SetClient(rc)
+	c.regions.put(reg)
+
+	first, err := hrpc.NewPutStr(context.Background(), "test", "a", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := hrpc.NewPutStr(context.Background(), "test", "b", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &pb.MutateResponse{}
+	rc.EXPECT().QueueBatch(gomock.Any(), gomock.Any()).Do(
+		func(_ context.Context, calls []hrpc.Call) {
+			calls[0].ResultChan() <- hrpc.RPCResult{Msg: want}
+			calls[1].ResultChan() <- hrpc.RPCResult{Error: region.RetryableError{}}
+		})
+
+	previous := sleepAndIncreaseBackoffOverride
+	t.Cleanup(func() { sleepAndIncreaseBackoffOverride = previous })
+	sleepAndIncreaseBackoffOverride = func(_ context.Context, backoff time.Duration) (
+		time.Duration, error) {
+		// Fail routing only after the first request has succeeded and the
+		// second request is selected for retry.
+		reg.MarkUnavailable()
+		close(c.done)
+		return backoff, nil
+	}
+
+	results, ok := c.SendBatch(context.Background(), []hrpc.Call{first, second})
+	if ok {
+		t.Fatal("expected routing failure")
+	}
+	if results[0].Error != nil || !proto.Equal(results[0].Msg, want) {
+		t.Errorf("successful first request overwritten: %+v", results[0])
+	}
+	if !errors.Is(results[1].Error, ErrClientClosed) {
+		t.Errorf("second request error = %v, want ErrClientClosed", results[1].Error)
+	}
+}
+
 func TestSendBatchBasic(t *testing.T) {
 	ctrl := test.NewController(t)
 	defer ctrl.Finish()
@@ -1134,7 +1182,11 @@ func TestFindClients(t *testing.T) {
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			results := make([]hrpc.RPCResult, len(tc.batch))
-			got, ok := c.findClients(context.Background(), tc.batch, results)
+			rpcToRes := make(map[hrpc.Call]int, len(tc.batch))
+			for i, rpc := range tc.batch {
+				rpcToRes[rpc] = i
+			}
+			got, ok := c.findClients(context.Background(), tc.batch, results, rpcToRes)
 			if ok && len(tc.expErrs) > 0 {
 				t.Fatalf("expected error, %v", results[3])
 
