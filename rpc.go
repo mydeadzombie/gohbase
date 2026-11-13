@@ -145,6 +145,11 @@ func (c *client) SendRPC(rpc hrpc.Call) (msg proto.Message, err error) {
 func (c *client) getRegionAndClientForRPC(ctx context.Context, rpc hrpc.Call) (
 	hrpc.RegionClient, error) {
 	for {
+		select {
+		case <-c.done:
+			return nil, ErrClientClosed
+		default:
+		}
 		reg, err := c.getRegionForRpc(ctx, rpc)
 		if err != nil {
 			return nil, err
@@ -1019,11 +1024,15 @@ func (c *client) establishRegion(reg hrpc.RegionInfo, addr string) {
 		dialCtx, cancel := context.WithTimeout(reg.Context(), c.regionLookupTimeout)
 		err = client.Dial(dialCtx)
 		cancel()
+		// Master connections are not owned by the region-client cache. A failed
+		// dial must release this attempt before retrying or returning.
+		if err != nil && reg == c.adminRegionInfo {
+			client.Close()
+		}
 
 		if err == nil {
 			if reg == c.adminRegionInfo {
-				reg.SetClient(client)
-				reg.MarkAvailable()
+				c.publishAdminClient(client)
 				return
 			}
 

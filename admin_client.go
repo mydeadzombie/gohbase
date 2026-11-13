@@ -27,6 +27,8 @@ const (
 
 // AdminClient to perform administrative operations with HMaster
 type AdminClient interface {
+	// Close releases the master connection and cancels pending master dial work.
+	Close()
 	CreateTable(t *hrpc.CreateTable) error
 	DeleteTable(t *hrpc.DeleteTable) error
 	EnableTable(t *hrpc.EnableTable) error
@@ -71,6 +73,7 @@ func newAdminClient(zkquorum string, options ...Option) AdminClient {
 		regionReadTimeout:   region.DefaultReadTimeout,
 		newRegionClientFn:   region.NewClient,
 		logger:              slog.Default(),
+		done:                make(chan struct{}),
 	}
 	for _, option := range options {
 		option(c)

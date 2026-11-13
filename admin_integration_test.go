@@ -31,9 +31,7 @@ func TestAdminColumnFamiliesAndTruncate(t *testing.T) {
 				name = ns + ":" + name
 			}
 			ac := gohbase.NewAdminClient(*host)
-			if closer, ok := ac.(interface{ Close() }); ok {
-				defer closer.Close()
-			}
+			defer ac.Close()
 			data := gohbase.NewClient(*host)
 			defer data.Close()
 			create := hrpc.NewCreateTable(ctx, []byte(name),

@@ -21,6 +21,8 @@ import (
 
 const (
 	noScannerID = math.MaxUint64
+	// Cleanup must not retry forever, even if the original scan was canceled.
+	scannerCloseTimeout = 5 * time.Second
 
 	rowsScanned  = "ROWS_SCANNED"
 	rowsFiltered = "ROWS_FILTERED"
@@ -462,21 +464,25 @@ func (s *scanner) closeRegionScanner() {
 		// Not closed at server side
 		// if we are closing in the middle of scanning a region,
 		// send a close scanner request
-		// TODO: add a deadline
-		rpc, err := hrpc.NewScanRange(context.Background(),
+		ctx, cancel := context.WithTimeout(context.Background(), scannerCloseTimeout)
+		rpc, err := hrpc.NewScanRange(ctx,
 			s.rpc.Table(), s.startRow, nil,
 			hrpc.ScannerID(s.curRegionScannerID),
 			hrpc.CloseScanner(),
 			hrpc.NumberOfRows(0),
 			hrpc.ScanStatsID(s.rpc.ScanStatsID()))
 		if err != nil {
+			cancel()
 			panic(fmt.Sprintf("should not happen: %s", err))
 		}
 
 		// If the request fails, the scanner lease will be expired
 		// and it will be closed automatically by hbase.
 		// No need to bother clients about that.
-		go s.SendRPC(rpc)
+		go func() {
+			defer cancel()
+			s.SendRPC(rpc)
+		}()
 	}
 	s.curRegionScannerID = noScannerID
 }

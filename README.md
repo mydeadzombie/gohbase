@@ -93,6 +93,12 @@ An absent ID returns an error rather than reporting premature success. Supply a
 deadline: cancellation stops waiting but cannot undo a server-side operation.
 Reuse the same request to retain its retry identity.
 
+Call `Close()` on admin clients as well as data clients. Admin shutdown cancels
+master dial work, releases the connection, and rejects later RPCs. Scanner cleanup
+is asynchronous and uses a separate five-second deadline, allowing a close attempt
+after scan cancellation without retrying indefinitely. These lifecycle changes
+have regression tests added; execution and live failure validation are pending.
+
 The live integration test creates and cleans up unique test tables:
 
 ```sh

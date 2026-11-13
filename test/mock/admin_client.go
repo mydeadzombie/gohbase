@@ -69,6 +69,18 @@ func (mr *MockAdminClientMockRecorder) AddReplicationPeer(r any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddReplicationPeer", reflect.TypeOf((*MockAdminClient)(nil).AddReplicationPeer), r)
 }
 
+// Close mocks base method.
+func (m *MockAdminClient) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockAdminClientMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockAdminClient)(nil).Close))
+}
+
 // ClusterStatus mocks base method.
 func (m *MockAdminClient) ClusterStatus() (*pb.ClusterStatus, error) {
 	m.ctrl.T.Helper()

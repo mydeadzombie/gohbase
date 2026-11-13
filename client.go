@@ -101,6 +101,8 @@ type client struct {
 
 	done      chan struct{}
 	closeOnce sync.Once
+	// Serializes publishing the master connection with admin shutdown.
+	adminMu sync.Mutex
 
 	newRegionClientFn func(string, region.ClientType, *region.RegionClientOptions) hrpc.RegionClient
 
@@ -343,12 +345,39 @@ func (c *client) Close() {
 	c.closeOnce.Do(func() {
 		close(c.done)
 		if c.clientType == region.MasterClient {
-			if ac := c.adminRegionInfo.Client(); ac != nil {
+			c.adminMu.Lock()
+			c.adminRegionInfo.MarkDead()
+			ac := c.adminRegionInfo.Client()
+			c.adminRegionInfo.SetClient(nil)
+			c.adminMu.Unlock()
+			if ac != nil {
 				ac.Close()
 			}
 		}
 		c.clients.closeAll()
 	})
+}
+
+// publishAdminClient transfers ownership of a connected master client, unless
+// shutdown won the race. The caller must not reuse the connection afterwards.
+func (c *client) publishAdminClient(rc hrpc.RegionClient) {
+	c.adminMu.Lock()
+	select {
+	case <-c.done:
+		c.adminMu.Unlock()
+		rc.Close()
+		return
+	default:
+	}
+	old := c.adminRegionInfo.Client()
+	c.adminRegionInfo.SetClient(rc)
+	if c.adminRegionInfo.AvailabilityChan() != nil {
+		c.adminRegionInfo.MarkAvailable()
+	}
+	c.adminMu.Unlock()
+	if old != nil && old != rc {
+		old.Close()
+	}
 }
 
 func (c *client) Scan(s *hrpc.Scan) hrpc.Scanner {
