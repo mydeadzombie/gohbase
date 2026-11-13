@@ -162,6 +162,11 @@ func (c *client) configBatchRequestsControl(opts *BatchRequestsControlOptions) e
 
 func (c *client) Dial(ctx context.Context) error {
 	c.dialOnce.Do(func() {
+		select {
+		case <-c.done:
+			return
+		default:
+		}
 		conn, err := c.dialer(ctx, "tcp", c.addr)
 		if err != nil {
 			c.fail(fmt.Errorf("failed to dial RegionServer: %s", err))
@@ -169,6 +174,13 @@ func (c *client) Dial(ctx context.Context) error {
 		}
 
 		c.connM.Lock()
+		select {
+		case <-c.done:
+			c.connM.Unlock()
+			conn.Close()
+			return
+		default:
+		}
 		c.conn = conn
 		c.connM.Unlock()
 

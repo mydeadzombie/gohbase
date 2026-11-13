@@ -114,6 +114,7 @@ func TestAdminProcedureIDsDecode(t *testing.T) {
 	// Field 1 (varint), value 42: HBase 2.x procedure response wire format.
 	for _, response := range []proto.Message{
 		&pb.AddColumnResponse{}, &pb.ModifyColumnResponse{}, &pb.TruncateTableResponse{},
+		&pb.ModifyTableResponse{},
 	} {
 		if err := proto.Unmarshal([]byte{8, 42}, response); err != nil {
 			t.Fatal(err)
@@ -150,5 +151,54 @@ func TestReplicationTableNamespaces(t *testing.T) {
 				t.Fatalf("column-family filter changed: %v", filter.Families)
 			}
 		})
+	}
+}
+
+func TestModifyTableDescriptor(t *testing.T) {
+	for _, namespace := range []string{"", "default", "tenant"} {
+		descriptor := &pb.TableSchema{
+			TableName:      &pb.TableName{Namespace: []byte(namespace), Qualifier: []byte("table")},
+			ColumnFamilies: []*pb.ColumnFamilySchema{{Name: []byte("cf")}},
+			Attributes: []*pb.BytesBytesPair{
+				{First: []byte("custom"), Second: []byte("value")},
+			},
+			Configuration: []*pb.NameStringPair{
+				{Name: proto.String("setting"), Value: proto.String("value")},
+			},
+		}
+		request, err := NewModifyTable(context.Background(), descriptor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := proto.Clone(descriptor).(*pb.TableSchema)
+		if namespace == "" {
+			expected.TableName.Namespace = []byte("default")
+		}
+		descriptor.ColumnFamilies[0].Name[0] = 'x'
+		descriptor.Attributes[0].Second[0] = 'x'
+		wire := request.ToProto().(*pb.ModifyTableRequest)
+		if !proto.Equal(wire.TableSchema, expected) ||
+			!proto.Equal(wire.TableName, expected.TableName) {
+			t.Fatal("descriptor changed or aliased", wire)
+		}
+		if !proto.Equal(wire, request.ToProto()) || wire.GetNonce() == 0 {
+			t.Fatal("unstable retry identity")
+		}
+	}
+}
+
+func TestModifyTableValidation(t *testing.T) {
+	for _, descriptor := range []*pb.TableSchema{
+		nil, {}, {TableName: &pb.TableName{Qualifier: []byte("table")}},
+		{TableName: &pb.TableName{Qualifier: []byte("ns:table")},
+			ColumnFamilies: []*pb.ColumnFamilySchema{{Name: []byte("cf")}}},
+		{TableName: &pb.TableName{Qualifier: []byte("table")},
+			ColumnFamilies: []*pb.ColumnFamilySchema{nil}},
+		{TableName: &pb.TableName{Qualifier: []byte("table")},
+			ColumnFamilies: []*pb.ColumnFamilySchema{{Name: []byte("cf")}, {Name: []byte("cf")}}},
+	} {
+		if _, err := NewModifyTable(context.Background(), descriptor); err == nil {
+			t.Errorf("accepted invalid descriptor: %v", descriptor)
+		}
 	}
 }

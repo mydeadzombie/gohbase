@@ -23,14 +23,20 @@ type clientRegionCache struct {
 	logger *slog.Logger
 
 	regions map[hrpc.RegionClient]map[hrpc.RegionInfo]struct{}
+	closed  bool
 }
 
 // put associates a region with client for provided addrss. It returns the client if it's already
 // in cache or otherwise instantiates a new one by calling newClient.
+// Returns nil after closeAll; no factory is called once the cache is closed.
 // TODO: obvious place for optimization (use map with address as key to lookup exisiting clients)
 func (rcc *clientRegionCache) put(addr string, r hrpc.RegionInfo,
 	newClient func() hrpc.RegionClient) hrpc.RegionClient {
 	rcc.m.Lock()
+	if rcc.closed {
+		rcc.m.Unlock()
+		return nil
+	}
 	for existingClient, regions := range rcc.regions {
 		// check if client already exists, checking by host and port
 		// because concurrent callers might try to put the same client
@@ -70,14 +76,21 @@ func (rcc *clientRegionCache) del(r hrpc.RegionInfo) {
 
 func (rcc *clientRegionCache) closeAll() {
 	rcc.m.Lock()
-	for client, regions := range rcc.regions {
+	rcc.closed = true
+	clients := rcc.regions
+	rcc.regions = nil
+	for _, regions := range clients {
 		for region := range regions {
+			region.MarkDead()
 			region.MarkUnavailable()
 			region.SetClient(nil)
 		}
-		client.Close()
 	}
 	rcc.m.Unlock()
+	// Close outside the cache lock: client cleanup may call back into the cache.
+	for client := range clients {
+		client.Close()
+	}
 }
 
 func (rcc *clientRegionCache) clientDown(c hrpc.RegionClient) map[hrpc.RegionInfo]struct{} {
@@ -87,6 +100,7 @@ func (rcc *clientRegionCache) clientDown(c hrpc.RegionClient) map[hrpc.RegionInf
 	rcc.m.Unlock()
 
 	if ok {
+		c.Close()
 		rcc.logger.Info("removed region client", "client", c)
 	}
 	return downregions

@@ -110,6 +110,57 @@ func (c *ModifyColumnFamily) ToProto() proto.Message {
 }
 func (c *ModifyColumnFamily) NewResponse() proto.Message { return &pb.ModifyColumnResponse{} }
 
+// ModifyTable replaces a complete table descriptor, including its column families.
+type ModifyTable struct {
+	adminMutation
+	schema *pb.TableSchema
+}
+
+// NewModifyTable copies a complete descriptor obtained from GetTableSchema.
+// Retain every family, attribute and configuration entry that should survive.
+// HBase validates server-specific restrictions on descriptor changes.
+func NewModifyTable(ctx context.Context, schema *pb.TableSchema) (*ModifyTable, error) {
+	if schema == nil || schema.TableName == nil || len(schema.ColumnFamilies) == 0 {
+		return nil, errors.New("table descriptor with name and column families is required")
+	}
+	descriptor := proto.Clone(schema).(*pb.TableSchema)
+	name := descriptor.TableName
+	if len(name.Namespace) == 0 {
+		name.Namespace = []byte("default")
+	}
+	if bytes.Contains(name.Namespace, []byte(":")) ||
+		bytes.Contains(name.Qualifier, []byte(":")) {
+		return nil, errors.New("descriptor namespace and qualifier must be separate")
+	}
+	table := append(bytes.Clone(name.Namespace), ':')
+	table = append(table, name.Qualifier...)
+	m, err := newAdminMutation(ctx, table)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(descriptor.ColumnFamilies))
+	for _, family := range descriptor.ColumnFamilies {
+		if family == nil || len(family.Name) == 0 || seen[string(family.Name)] {
+			return nil, errors.New("column families must have distinct nonempty names")
+		}
+		seen[string(family.Name)] = true
+	}
+	if err := proto.CheckInitialized(descriptor); err != nil {
+		return nil, err
+	}
+	return &ModifyTable{m, descriptor}, nil
+}
+
+func (c *ModifyTable) Name() string        { return "ModifyTable" }
+func (c *ModifyTable) Description() string { return c.Name() }
+func (c *ModifyTable) ToProto() proto.Message {
+	return &pb.ModifyTableRequest{
+		TableName: c.schema.TableName, TableSchema: c.schema,
+		NonceGroup: proto.Uint64(adminNonceGroup), Nonce: proto.Uint64(c.nonce),
+	}
+}
+func (c *ModifyTable) NewResponse() proto.Message { return &pb.ModifyTableResponse{} }
+
 // TruncateTable removes all rows from a disabled table, then enables it again.
 type TruncateTable struct {
 	adminMutation

@@ -6,7 +6,8 @@ files removed.
 
 The following changes were made to those files:
   - the package name was changed to "pb". (`sed -i 's/hbase.pb/pb/g' ./*`)
-  - Master.proto AddColumnResponse, ModifyColumnResponse and TruncateTableResponse
+  - Master.proto AddColumnResponse, ModifyColumnResponse, ModifyTableResponse and
+    TruncateTableResponse
     include optional uint64 proc_id = 1 from Apache HBase rel/2.0.4's
     hbase-protocol-shaded/src/main/protobuf/Master.proto, for completion polling.
 

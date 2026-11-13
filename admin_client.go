@@ -35,6 +35,7 @@ type AdminClient interface {
 	DisableTable(t *hrpc.DisableTable) error
 	AddColumnFamily(t *hrpc.AddColumnFamily) error
 	ModifyColumnFamily(t *hrpc.ModifyColumnFamily) error
+	ModifyTable(t *hrpc.ModifyTable) error
 	TruncateTable(t *hrpc.TruncateTable) error
 	CreateSnapshot(t *hrpc.Snapshot) error
 	DeleteSnapshot(t *hrpc.Snapshot) error
@@ -169,6 +170,17 @@ func (c *client) AddColumnFamily(t *hrpc.AddColumnFamily) error {
 func (c *client) ModifyColumnFamily(t *hrpc.ModifyColumnFamily) error {
 	return c.runAdminProcedure(t, func(msg proto.Message) (*uint64, bool) {
 		r, ok := msg.(*pb.ModifyColumnResponse)
+		if !ok || r == nil {
+			return nil, false
+		}
+		return r.ProcId, true
+	})
+}
+
+// ModifyTable replaces a complete table descriptor and waits for HBase 2.x completion.
+func (c *client) ModifyTable(t *hrpc.ModifyTable) error {
+	return c.runAdminProcedure(t, func(msg proto.Message) (*uint64, bool) {
+		r, ok := msg.(*pb.ModifyTableResponse)
 		if !ok || r == nil {
 			return nil, false
 		}

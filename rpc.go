@@ -1016,6 +1016,11 @@ func (c *client) establishRegion(reg hrpc.RegionInfo, addr string) {
 			client = c.clients.put(addr, reg, func() hrpc.RegionClient {
 				return c.newRegionClientFn(addr, c.clientType, options)
 			})
+			if client == nil {
+				// Shutdown has closed the cache. Do not create or dial another client.
+				reg.MarkDead()
+				return
+			}
 		}
 
 		// connect to the region's regionserver.

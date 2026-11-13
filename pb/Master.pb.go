@@ -1654,6 +1654,7 @@ func (x *ModifyTableRequest) GetNonce() uint64 {
 
 type ModifyTableResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProcId        *uint64                `protobuf:"varint,1,opt,name=proc_id,json=procId" json:"proc_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1686,6 +1687,13 @@ func (x *ModifyTableResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ModifyTableResponse.ProtoReflect.Descriptor instead.
 func (*ModifyTableResponse) Descriptor() ([]byte, []int) {
 	return file_Master_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ModifyTableResponse) GetProcId() uint64 {
+	if x != nil && x.ProcId != nil {
+		return *x.ProcId
+	}
+	return 0
 }
 
 type CreateNamespaceRequest struct {
@@ -5376,8 +5384,9 @@ const file_Master_proto_rawDesc = "" +
 	"\ftable_schema\x18\x02 \x02(\v2\x0f.pb.TableSchemaR\vtableSchema\x12\"\n" +
 	"\vnonce_group\x18\x03 \x01(\x04:\x010R\n" +
 	"nonceGroup\x12\x17\n" +
-	"\x05nonce\x18\x04 \x01(\x04:\x010R\x05nonce\"\x15\n" +
-	"\x13ModifyTableResponse\"\xa0\x01\n" +
+	"\x05nonce\x18\x04 \x01(\x04:\x010R\x05nonce\".\n" +
+	"\x13ModifyTableResponse\x12\x17\n" +
+	"\aproc_id\x18\x01 \x01(\x04R\x06procId\"\xa0\x01\n" +
 	"\x16CreateNamespaceRequest\x12I\n" +
 	"\x13namespaceDescriptor\x18\x01 \x02(\v2\x17.pb.NamespaceDescriptorR\x13namespaceDescriptor\x12\"\n" +
 	"\vnonce_group\x18\x02 \x01(\x04:\x010R\n" +

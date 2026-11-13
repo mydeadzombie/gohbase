@@ -21,7 +21,9 @@ import (
 )
 
 func TestAdminMutationProcedure(t *testing.T) {
-	for _, operation := range []string{"AddColumn", "ModifyColumn", "TruncateTable"} {
+	for _, operation := range []string{
+		"AddColumn", "ModifyColumn", "ModifyTable", "TruncateTable",
+	} {
 		for _, scenario := range []string{"success", "missing_id", "rpc_error", "wrong_response",
 			"procedure_error", "canceled", "wrong_procedure_response"} {
 			t.Run(operation+"/"+scenario, func(t *testing.T) {
@@ -50,6 +52,8 @@ func TestAdminMutationProcedure(t *testing.T) {
 							msg = &pb.AddColumnResponse{ProcId: id}
 						case "ModifyColumn":
 							msg = &pb.ModifyColumnResponse{ProcId: id}
+						case "ModifyTable":
+							msg = &pb.ModifyTableResponse{ProcId: id}
 						case "TruncateTable":
 							msg = &pb.TruncateTableResponse{ProcId: id}
 						}
@@ -104,6 +108,17 @@ func TestAdminMutationProcedure(t *testing.T) {
 						t.Fatal(e)
 					}
 					err = c.ModifyColumnFamily(req)
+				case "ModifyTable":
+					req, e := hrpc.NewModifyTable(ctx, &pb.TableSchema{
+						TableName: &pb.TableName{
+							Namespace: []byte("ns"), Qualifier: []byte("table"),
+						},
+						ColumnFamilies: []*pb.ColumnFamilySchema{family},
+					})
+					if e != nil {
+						t.Fatal(e)
+					}
+					err = c.ModifyTable(req)
 				case "TruncateTable":
 					req, e := hrpc.NewTruncateTable(ctx, []byte("ns:table"), true)
 					if e != nil {

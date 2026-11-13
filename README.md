@@ -93,11 +93,32 @@ An absent ID returns an error rather than reporting premature success. Supply a
 deadline: cancellation stops waiting but cannot undo a server-side operation.
 Reuse the same request to retain its retry identity.
 
+`AdminClient.ModifyTable` accepts `hrpc.NewModifyTable(ctx, descriptor)` and
+waits for HBase 2.x procedure completion. Obtain the full descriptor from
+`GetTableSchema`, edit its table attributes/configuration or families, then pass
+it to the constructor. All families/settings that should survive must be retained;
+omitted families may be removed by HBase. The constructor copies the descriptor,
+normalizes an empty namespace to `default`, rejects unnamed/duplicate families,
+and preserves a stable nonce across retries. Concurrent descriptor changes are
+not merged automatically. Unit and live integration coverage has been added;
+these new tests have not been executed.
+
 Call `Close()` on admin clients as well as data clients. Admin shutdown cancels
 master dial work, releases the connection, and rejects later RPCs. Scanner cleanup
 is asynchronous and uses a separate five-second deadline, allowing a close attempt
 after scan cancellation without retrying indefinitely. These lifecycle changes
 have regression tests added; execution and live failure validation are pending.
+
+Region-client shutdown also rejects late cache insertions and closes sockets
+returned by an in-flight dial after `Close()`. Failure eviction closes the removed
+client; shutdown releases cached references and cancels cached region contexts.
+These changes have added regression tests but are not yet runtime-validated.
+
+`TestCheckAndMutateConcurrentClients` is an additional integration test for two
+clients contending on one expected value and for preserving data after a failed
+condition. Run it against a test cluster using `-tags=integration` and the same
+namespace/host settings below. Ambiguous timeout and failover behavior remain
+outside this test's coverage.
 
 The live integration test creates and cleans up unique test tables:
 

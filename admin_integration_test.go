@@ -110,6 +110,32 @@ func TestAdminColumnFamiliesAndTruncate(t *testing.T) {
 			if !changed {
 				t.Fatal("column family modification not visible")
 			}
+			if len(schemas) != 1 {
+				t.Fatalf("expected one table descriptor, got %d", len(schemas))
+			}
+			schemas[0].Attributes = append(schemas[0].Attributes, &pb.BytesBytesPair{
+				First: []byte("gohbase.test.attribute"), Second: []byte("retained"),
+			})
+			modifyTable, err := hrpc.NewModifyTable(ctx, schemas[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ac.ModifyTable(modifyTable); err != nil {
+				t.Fatal(err)
+			}
+			schemas, err = ac.GetTableSchema(describe)
+			if err != nil || len(schemas) != 1 {
+				t.Fatalf("table descriptors: %v, %v", schemas, err)
+			}
+			attributeFound := false
+			for _, attribute := range schemas[0].Attributes {
+				attributeFound = attributeFound ||
+					string(attribute.First) == "gohbase.test.attribute" &&
+						string(attribute.Second) == "retained"
+			}
+			if !attributeFound || len(schemas[0].ColumnFamilies) != 2 {
+				t.Fatal("table attribute update lost attributes or families")
+			}
 			put, err := hrpc.NewPutStr(ctx, name, "a",
 				map[string]map[string][]byte{"TypeDatahbase": {"x": []byte("value")}})
 			if err != nil {

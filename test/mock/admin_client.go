@@ -282,6 +282,20 @@ func (mr *MockAdminClientMockRecorder) ModifyColumnFamily(t any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModifyColumnFamily", reflect.TypeOf((*MockAdminClient)(nil).ModifyColumnFamily), t)
 }
 
+// ModifyTable mocks base method.
+func (m *MockAdminClient) ModifyTable(t *hrpc.ModifyTable) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ModifyTable", t)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ModifyTable indicates an expected call of ModifyTable.
+func (mr *MockAdminClientMockRecorder) ModifyTable(t any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModifyTable", reflect.TypeOf((*MockAdminClient)(nil).ModifyTable), t)
+}
+
 // MoveRegion mocks base method.
 func (m *MockAdminClient) MoveRegion(mr *hrpc.MoveRegion) error {
 	m.ctrl.T.Helper()

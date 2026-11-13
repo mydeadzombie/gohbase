@@ -459,6 +459,7 @@ func TestSendRPCToRegionClientDownDelayed(t *testing.T) {
 	mockCall.EXPECT().ResultChan().Return(result).Times(1)
 
 	rc2 := newRegionClientFn("regionserver:1")()
+	rc.EXPECT().Close().Times(1)
 	rc.EXPECT().QueueRPC(mockCall).Times(1).Do(func(rpc hrpc.Call) {
 		// remove old client from clients cache
 		c.clients.clientDown(rc)
