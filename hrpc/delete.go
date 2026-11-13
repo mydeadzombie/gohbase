@@ -42,11 +42,7 @@ func (dt *DeleteTable) Description() string {
 // ToProto converts the RPC into a protobuf message
 func (dt *DeleteTable) ToProto() proto.Message {
 	return &pb.DeleteTableRequest{
-		TableName: &pb.TableName{
-			// TODO: hadle namespaces properly
-			Namespace: []byte("default"),
-			Qualifier: dt.table,
-		},
+		TableName: tableNameProto(dt.table),
 	}
 }
 

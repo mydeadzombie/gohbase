@@ -58,6 +58,52 @@ scanRequest, err := hrpc.NewScanStr(context.Background(), "table",
 scanRsp, err := client.Scan(scanRequest)
 ```
 
+## HBase 2.x administration
+
+Create, enable, disable, delete, and replication table filters accept either
+`table` (default namespace) or `namespace:table`. Namespaces must already exist.
+
+The fork adds `AdminClient.AddColumnFamily`, `ModifyColumnFamily`, and
+`TruncateTable`. Their request constructors return `(request, error)`:
+
+```go
+add, err := hrpc.NewAddColumnFamily(ctx, []byte("tenant:materials"),
+    &pb.ColumnFamilySchema{Name: []byte("TypeDatahbase")})
+if err != nil {
+    return err
+}
+if err := admin.AddColumnFamily(add); err != nil {
+    return err
+}
+```
+
+Import `github.com/tsuna/gohbase/pb` for descriptors. For modification, fetch the
+existing descriptor with `GetTableSchema`, change the desired attributes, and pass
+the complete descriptor to `hrpc.NewModifyColumnFamily`. This replaces a descriptor;
+it does not merge an attribute patch. Constructors copy table/descriptor input and
+keep request nonces stable across retries.
+
+To truncate, explicitly disable the table, then construct
+`hrpc.NewTruncateTable(ctx, table, preserveSplits)` and call `admin.TruncateTable`.
+Truncation removes all rows and HBase re-enables the table on completion.
+The client does not enforce application permissions such as `Truncatable`.
+
+These three new methods require HBase 2.x procedure IDs and wait for completion.
+An absent ID returns an error rather than reporting premature success. Supply a
+deadline: cancellation stops waiting but cannot undo a server-side operation.
+Reuse the same request to retain its retry identity.
+
+The live integration test creates and cleans up unique test tables:
+
+```sh
+HBASE_TEST_NAMESPACE=test_ns go test -tags=integration \
+    -run '^TestAdminColumnFamiliesAndTruncate$' -timeout=5m -args -host=localhost
+```
+
+Use a test cluster and an existing namespace. Omit `HBASE_TEST_NAMESPACE` to use
+the default namespace. Both split-preservation modes are tested. Wire fields were
+checked against Apache HBase 2.0.4; live compatibility still needs validation.
+
 ## Contributing
 
 Any help would be appreciated. Please use Github pull requests

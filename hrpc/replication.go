@@ -105,12 +105,8 @@ func AddReplicationPeerReplicateTableFamilies(table []byte, families ...[]byte) 
 		}
 		l.tableCfs = append(l.tableCfs,
 			&pb.TableCF{
-				TableName: &pb.TableName{
-					// TODO: handle namespaces
-					Namespace: []byte("default"),
-					Qualifier: table,
-				},
-				Families: families,
+				TableName: tableNameProto(table),
+				Families:  families,
 			},
 		)
 		return nil

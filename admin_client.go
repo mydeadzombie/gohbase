@@ -16,6 +16,7 @@ import (
 	"github.com/tsuna/gohbase/pb"
 	"github.com/tsuna/gohbase/region"
 	"github.com/tsuna/gohbase/zk"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -30,6 +31,9 @@ type AdminClient interface {
 	DeleteTable(t *hrpc.DeleteTable) error
 	EnableTable(t *hrpc.EnableTable) error
 	DisableTable(t *hrpc.DisableTable) error
+	AddColumnFamily(t *hrpc.AddColumnFamily) error
+	ModifyColumnFamily(t *hrpc.ModifyColumnFamily) error
+	TruncateTable(t *hrpc.TruncateTable) error
 	CreateSnapshot(t *hrpc.Snapshot) error
 	DeleteSnapshot(t *hrpc.Snapshot) error
 	ListSnapshots(t *hrpc.ListSnapshots) ([]*pb.SnapshotDescription, error)
@@ -147,6 +151,56 @@ func (c *client) DisableTable(t *hrpc.DisableTable) error {
 	return c.checkProcedureWithBackoff(t.Context(), r.GetProcId())
 }
 
+// AddColumnFamily waits for the column-family addition to complete on HBase 2.x.
+func (c *client) AddColumnFamily(t *hrpc.AddColumnFamily) error {
+	return c.runAdminProcedure(t, func(msg proto.Message) (*uint64, bool) {
+		r, ok := msg.(*pb.AddColumnResponse)
+		if !ok || r == nil {
+			return nil, false
+		}
+		return r.ProcId, true
+	})
+}
+
+// ModifyColumnFamily waits for the descriptor replacement to complete on HBase 2.x.
+func (c *client) ModifyColumnFamily(t *hrpc.ModifyColumnFamily) error {
+	return c.runAdminProcedure(t, func(msg proto.Message) (*uint64, bool) {
+		r, ok := msg.(*pb.ModifyColumnResponse)
+		if !ok || r == nil {
+			return nil, false
+		}
+		return r.ProcId, true
+	})
+}
+
+// TruncateTable waits for truncation to complete. The table must already be disabled.
+// Cancellation stops waiting; it does not roll back a procedure accepted by HBase.
+func (c *client) TruncateTable(t *hrpc.TruncateTable) error {
+	return c.runAdminProcedure(t, func(msg proto.Message) (*uint64, bool) {
+		r, ok := msg.(*pb.TruncateTableResponse)
+		if !ok || r == nil {
+			return nil, false
+		}
+		return r.ProcId, true
+	})
+}
+
+func (c *client) runAdminProcedure(call hrpc.Call,
+	procedureID func(proto.Message) (*uint64, bool)) error {
+	msg, err := c.SendRPC(call)
+	if err != nil {
+		return err
+	}
+	id, ok := procedureID(msg)
+	if !ok {
+		return fmt.Errorf("unexpected %s response: %T", call.Name(), msg)
+	}
+	if id == nil {
+		return fmt.Errorf("%s response has no procedure ID; HBase 2.x is required", call.Name())
+	}
+	return c.checkProcedureWithBackoff(call.Context(), *id)
+}
+
 func (c *client) checkProcedureWithBackoff(ctx context.Context, procID uint64) error {
 	backoff := backoffStart
 	for {
@@ -155,7 +209,10 @@ func (c *client) checkProcedureWithBackoff(ctx context.Context, procID uint64) e
 			return err
 		}
 
-		res := pbmsg.(*pb.GetProcedureResultResponse)
+		res, ok := pbmsg.(*pb.GetProcedureResultResponse)
+		if !ok || res == nil {
+			return fmt.Errorf("unexpected GetProcedureResult response: %T", pbmsg)
+		}
 		switch res.GetState() {
 		case pb.GetProcedureResultResponse_NOT_FOUND:
 			return fmt.Errorf("procedure not found")

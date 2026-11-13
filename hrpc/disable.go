@@ -42,11 +42,7 @@ func (dt *DisableTable) Description() string {
 // ToProto converts the RPC into a protobuf message
 func (dt *DisableTable) ToProto() proto.Message {
 	return &pb.DisableTableRequest{
-		TableName: &pb.TableName{
-			// TODO: handle namespaces
-			Namespace: []byte("default"),
-			Qualifier: dt.table,
-		},
+		TableName: tableNameProto(dt.table),
 	}
 }
 
