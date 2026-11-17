@@ -298,6 +298,8 @@ func TestEstablishRegionDialFail(t *testing.T) {
 	rcFailDial := mockRegion.NewMockRegionClient(ctrl)
 	// return an error to make sure we lookup an new client
 	rcFailDial.EXPECT().Dial(gomock.Any()).Return(errors.New("ooops")).AnyTimes()
+	// Evicting the failed client must release its resources exactly once.
+	rcFailDial.EXPECT().Close().Times(1)
 	rcFailDial.EXPECT().Addr().Return("regionserver:1").AnyTimes()
 	rcFailDial.EXPECT().String().Return("regionserver:1").AnyTimes()
 

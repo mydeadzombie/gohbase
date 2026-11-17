@@ -6,7 +6,9 @@
 package hrpc
 
 import (
+	"bytes"
 	"context"
+	"errors"
 
 	"github.com/tsuna/gohbase/pb"
 	"google.golang.org/protobuf/proto"
@@ -19,6 +21,8 @@ type CreateTable struct {
 	attributes map[string]string
 	families   map[string]map[string]string
 	splitKeys  [][]byte
+	schema     *pb.TableSchema
+	nonce      *uint64
 }
 
 var defaultFamiliesAttributes = map[string]string{
@@ -61,6 +65,9 @@ func NewCreateTable(ctx context.Context, table []byte,
 				ct.families[family][k] = dv
 			}
 		}
+		for k, v := range attrs {
+			ct.families[family][k] = v
+		}
 	}
 	return ct
 }
@@ -91,6 +98,15 @@ func (ct *CreateTable) Description() string {
 
 // ToProto converts the RPC into a protobuf message
 func (ct *CreateTable) ToProto() proto.Message {
+	if ct.schema != nil {
+		keys := make([][]byte, len(ct.splitKeys))
+		for i, k := range ct.splitKeys {
+			keys[i] = bytes.Clone(k)
+		}
+		return &pb.CreateTableRequest{TableSchema: proto.Clone(ct.schema).(*pb.TableSchema),
+			SplitKeys:  keys,
+			NonceGroup: proto.Uint64(adminNonceGroup), Nonce: proto.Uint64(*ct.nonce)}
+	}
 	pbAttributes := make([]*pb.BytesBytesPair, 0, len(ct.attributes))
 	for k, v := range ct.attributes {
 		pbAttributes = append(pbAttributes, &pb.BytesBytesPair{
@@ -128,4 +144,56 @@ func (ct *CreateTable) ToProto() proto.Message {
 // RPC.
 func (ct *CreateTable) NewResponse() proto.Message {
 	return &pb.CreateTableResponse{}
+}
+
+// NewCreateTableWithSchema creates a table from a complete descriptor without
+// injecting client defaults. The caller supplies the destination TableName.
+// All attributes/configuration and split keys are copied. Existing namespaces
+// are required; HBase validates descriptor settings. Submit via AdminClient.CreateTable.
+func NewCreateTableWithSchema(ctx context.Context, descriptor *pb.TableSchema,
+	splitKeys [][]byte) (*CreateTable, error) {
+	if ctx == nil ||
+		descriptor == nil ||
+		descriptor.TableName == nil ||
+		len(descriptor.ColumnFamilies) == 0 {
+		return nil, errors.New("context and table descriptor with column families are required")
+	}
+	schema := proto.Clone(descriptor).(*pb.TableSchema)
+	name := schema.TableName
+	if len(name.Namespace) == 0 {
+		name.Namespace = []byte("default")
+	}
+	if bytes.ContainsRune(name.Namespace, ':') || bytes.ContainsRune(name.Qualifier, ':') {
+		return nil, errors.New("namespace and qualifier must be separate")
+	}
+	mutation,
+		err := newAdminMutation(ctx,
+		append(append(bytes.Clone(name.Namespace),
+			':'),
+			name.Qualifier...))
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(schema.ColumnFamilies))
+	for _, family := range schema.ColumnFamilies {
+		if family == nil || len(family.Name) == 0 || seen[string(family.Name)] {
+			return nil, errors.New("distinct nonempty column families required")
+		}
+		seen[string(family.Name)] = true
+	}
+	if err := proto.CheckInitialized(schema); err != nil {
+		return nil, err
+	}
+	keys := make([][]byte, len(splitKeys))
+	for i, key := range splitKeys {
+		if len(key) == 0 || len(key) > 32767 || (i > 0 && bytes.Compare(splitKeys[i-1], key) >= 0) {
+			return nil, errors.New("split keys must be nonempty, increasing, and <= 32767 bytes")
+		}
+		keys[i] = bytes.Clone(key)
+	}
+	return &CreateTable{base: mutation.base,
+			schema:    schema,
+			splitKeys: keys,
+			nonce:     proto.Uint64(mutation.nonce)},
+		nil
 }

@@ -141,3 +141,31 @@ when you send your first change for review.
 ## License
 
 Copyright © 2015 The GoHBase Authors. All rights reserved. Use of this source code is governed by the Apache License 2.0 that can be found in the [COPYING](COPYING) file.
+
+### Copy-support request APIs
+
+`hrpc.NewPutCells(ctx, table, row, []hrpc.PutCell, options...)` builds one row
+mutation with explicit per-cell timestamps, including multiple versions of the
+same qualifier. Inputs are copied. Timestamps are in `[0, math.MaxInt64)`;
+row-level timestamp options and duplicate family/qualifier/timestamp triples are
+rejected. Protobuf and cell-block serialization retain every version. Use
+`mutation.PutCells()` to inspect a copied cell list; `Values()` is nil for these
+requests. Existing map-based `NewPut` behavior is unchanged. Cell tags and delete
+markers are not supported by this API.
+
+`hrpc.NewCreateTableWithSchema(ctx, descriptor, splitKeys)` accepts a complete
+`pb.TableSchema`, copies it, and preserves family/table attributes and configuration
+without injecting client defaults. Set the destination table name explicitly.
+Submit the returned request through the existing `AdminClient.CreateTable` method;
+its existing procedure polling is used. The request keeps stable nonces across
+retries. Split keys must be nonempty and strictly increasing. Namespaces must
+already exist. HBase validates setting names and values.
+
+The existing `NewCreateTable` map API still supplies its historical defaults but
+now also forwards caller-supplied family attributes outside the default list.
+Consequently invalid custom attributes previously discarded may now be rejected
+by the server. Full descriptor configuration requires the new constructor.
+
+These APIs do not make an entire table copy atomic or snapshot-consistent.
+Request encoding has unit coverage; run `TestCopySupportDescriptorsAndCellVersions`
+with the integration build tag against a disposable cluster before deploying.

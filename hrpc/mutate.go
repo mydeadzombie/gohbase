@@ -52,6 +52,7 @@ type Mutate struct {
 
 	// values is a map of column families to a map of column qualifiers to bytes
 	values map[string]map[string][]byte
+	cells  []PutCell
 
 	ttl              []byte
 	timestamp        uint64
@@ -88,6 +89,9 @@ func Timestamp(ts time.Time) func(Call) error {
 		if !ok {
 			return errors.New("'Timestamp' option can only be used with mutation queries")
 		}
+		if m.cells != nil {
+			return errors.New("Timestamp cannot override explicit cell timestamps")
+		}
 		m.timestamp = uint64(ts.UnixNano() / 1e6)
 		return nil
 	}
@@ -99,6 +103,9 @@ func TimestampUint64(ts uint64) func(Call) error {
 		m, ok := o.(*Mutate)
 		if !ok {
 			return errors.New("'TimestampUint64' option can only be used with mutation queries")
+		}
+		if m.cells != nil {
+			return errors.New("TimestampUint64 cannot override explicit cell timestamps")
 		}
 		m.timestamp = ts
 		return nil
@@ -293,6 +300,7 @@ func (m *Mutate) SkipBatch() bool {
 	return m.skipbatch
 }
 
+// Values returns nil for NewPutCells; use PutCells for those mutations.
 // Values returns the internal values object
 // which should be treated as read-only.
 // This would typically be used for calculations
@@ -313,6 +321,9 @@ var (
 )
 
 func (m *Mutate) valuesToProto(ts *uint64) []*pb.MutationProto_ColumnValue {
+	if m.cells != nil {
+		return m.cellsToProto()
+	}
 	cvs := make([]*pb.MutationProto_ColumnValue, len(m.values))
 	i := 0
 	for k, v := range m.values {
@@ -425,6 +436,9 @@ func appendCellblock(row []byte, family, qualifier string, value []byte, ts uint
 }
 
 func (m *Mutate) valuesToCellblocks() ([]byte, int32, uint32) {
+	if m.cells != nil {
+		return m.cellsToCellblocks()
+	}
 	if len(m.values) == 0 {
 		return nil, 0, 0
 	}
