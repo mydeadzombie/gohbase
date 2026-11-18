@@ -281,7 +281,7 @@ func EffectiveUser(user string) Option {
 }
 
 // FlushInterval will return an option that will set the timeout for flushing
-// the RPC queues used in a given client
+// the RPC queues used in a given client. Zero flushes without a timer delay.
 func FlushInterval(interval time.Duration) Option {
 	return func(c *client) {
 		c.flushInterval = interval

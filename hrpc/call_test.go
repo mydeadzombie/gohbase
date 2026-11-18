@@ -128,6 +128,32 @@ func TestDeserializeCellblocks(t *testing.T) {
 	}
 }
 
+func TestDecodedCellStorageIndependent(t *testing.T) {
+	block := appendCellblock([]byte("row"), "f", "a", []byte("one"), 11,
+		byte(pb.CellType_PUT), nil)
+	block = appendCellblock([]byte("row"), "f", "b", []byte("two"), 22,
+		byte(pb.CellType_DELETE), block)
+	cells, _, err := deserializeCellBlocks(block, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	*cells[0].Timestamp = 99
+	*cells[0].CellType = pb.CellType_DELETE_COLUMN
+	if cells[1].GetTimestamp() != 22 || cells[1].GetCellType() != pb.CellType_DELETE {
+		t.Fatal("cell scalar storage overlaps")
+	}
+	other, _, err := deserializeCellBlocks(block, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other[0].GetTimestamp() != 11 || cells[0].GetTimestamp() != 99 {
+		t.Fatal("result storage reused across decodes")
+	}
+	if cells, _, err := deserializeCellBlocks(nil, ^uint32(0)); err == nil || cells != nil {
+		t.Fatal("invalid cell count accepted")
+	}
+}
+
 // BenchmarkDeserializeCellblocks compares shows cost of deserializing
 // various sizes of cell blocks into
 //  1. pb.Cells (v1)

@@ -991,12 +991,13 @@ func (c *client) establishRegion(reg hrpc.RegionInfo, addr string) {
 			// master that we don't add to the cache
 			// TODO: consider combining this case with the regular regionserver path
 			options := &region.RegionClientOptions{
-				QueueSize:     c.rpcQueueSize,
-				FlushInterval: c.flushInterval,
-				EffectiveUser: c.effectiveUser,
-				ReadTimeout:   c.regionReadTimeout,
-				Dialer:        c.regionDialer,
-				Logger:        c.logger,
+				QueueSize:        c.rpcQueueSize,
+				FlushInterval:    c.flushInterval,
+				FlushIntervalSet: true,
+				EffectiveUser:    c.effectiveUser,
+				ReadTimeout:      c.regionReadTimeout,
+				Dialer:           c.regionDialer,
+				Logger:           c.logger,
 			}
 			client = c.newRegionClientFn(addr, c.clientType, options)
 		} else {
@@ -1004,6 +1005,7 @@ func (c *client) establishRegion(reg hrpc.RegionInfo, addr string) {
 			options := &region.RegionClientOptions{
 				QueueSize:            c.rpcQueueSize,
 				FlushInterval:        c.flushInterval,
+				FlushIntervalSet:     true,
 				EffectiveUser:        c.effectiveUser,
 				ReadTimeout:          c.regionReadTimeout,
 				Codec:                c.compressionCodec,

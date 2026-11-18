@@ -214,7 +214,17 @@ func (c *Cell) String() string {
 }
 
 // cellFromCellBlock deserializes a cell from a reader
+type decodedCell struct {
+	cell      pb.Cell
+	timestamp uint64
+	cellType  pb.CellType
+}
+
 func cellFromCellBlock(b []byte) (*pb.Cell, uint32, error) {
+	return cellFromCellBlockInto(b, new(decodedCell))
+}
+
+func cellFromCellBlockInto(b []byte, dst *decodedCell) (*pb.Cell, uint32, error) {
 	if len(b) < 4 {
 		return nil, 0, fmt.Errorf(
 			"buffer is too small: expected %d, got %d", 4, len(b))
@@ -258,24 +268,31 @@ func cellFromCellBlock(b []byte) (*pb.Cell, uint32, error) {
 
 	value := b[:valueLen]
 
-	return &pb.Cell{
-		Row:       key,
-		Family:    family,
-		Qualifier: qualifier,
-		Timestamp: &timestamp,
-		Value:     value,
-		CellType:  pb.CellType(cellType).Enum(),
-	}, kvLen + 4, nil
+	dst.timestamp = timestamp
+	dst.cellType = pb.CellType(cellType)
+	dst.cell.Row = key
+	dst.cell.Family = family
+	dst.cell.Qualifier = qualifier
+	dst.cell.Timestamp = &dst.timestamp
+	dst.cell.Value = value
+	dst.cell.CellType = &dst.cellType
+	return &dst.cell, kvLen + 4, nil
 }
 
 func deserializeCellBlocks(b []byte, cellsLen uint32) ([]*pb.Cell, uint32, error) {
 	if cellsLen == 0 {
 		return nil, 0, nil
 	}
+	// Each cell needs at least 24 bytes, even with empty row/family/value.
+	if uint64(cellsLen) > uint64(len(b))/24 {
+		return nil, 0, errors.New("cell count exceeds cell block size")
+	}
 	cells := make([]*pb.Cell, cellsLen)
+	// Keep scalar pointers with their cell rather than allocating each separately.
+	storage := make([]decodedCell, cellsLen)
 	var readLen uint32
 	for i := 0; i < int(cellsLen); i++ {
-		c, l, err := cellFromCellBlock(b[readLen:])
+		c, l, err := cellFromCellBlockInto(b[readLen:], &storage[i])
 		if err != nil {
 			return nil, readLen, err
 		}

@@ -24,6 +24,8 @@ type RegionClientOptions struct {
 	QueueSize int
 	// FlushInterval sets the flush interval for batching RPCs
 	FlushInterval time.Duration
+	// FlushIntervalSet distinguishes an explicit zero (immediate flush) from omitted options.
+	FlushIntervalSet bool
 	// EffectiveUser sets the effective user for the connection
 	EffectiveUser string
 	// ReadTimeout sets the read timeout for RPCs
@@ -84,7 +86,7 @@ func NewClient(addr string, ctype ClientType, opts *RegionClientOptions) hrpc.Re
 		if opts.QueueSize > 0 {
 			c.rpcQueueSize = opts.QueueSize
 		}
-		if opts.FlushInterval > 0 {
+		if opts.FlushInterval > 0 || (opts.FlushIntervalSet && opts.FlushInterval == 0) {
 			c.flushInterval = opts.FlushInterval
 		}
 		if opts.EffectiveUser != "" {
