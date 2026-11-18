@@ -464,9 +464,12 @@ func (c *client) processRPCs() {
 				m.add(rpcs)
 			}
 			continue
-		} else if l >= c.rpcQueueSize || c.flushInterval == 0 {
+		} else if l >= c.rpcQueueSize {
 			// batch is full, flush
 			flush("queue full")
+			continue
+		} else if c.flushInterval == 0 {
+			flush("immediate")
 			continue
 		}
 
