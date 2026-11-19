@@ -1904,3 +1904,32 @@ func TestCheckAndMutate(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkFamiliesToColumn(b *testing.B) {
+	for _, count := range []int{1, 5, 10, 21} {
+		var qualifiers []string
+		for i := range count {
+			qualifiers = append(qualifiers, "field"+strconv.Itoa(i))
+		}
+		families := map[string][]string{"Meta": qualifiers}
+		b.Run(strconv.Itoa(count), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				familiesToColumn(families)
+			}
+		})
+	}
+}
+
+func TestColumnNamesRemainIndependent(t *testing.T) {
+	col := familiesToColumn(map[string][]string{"Meta": {"a", "", "b"}})[0]
+	if !reflect.DeepEqual(col.Qualifier, [][]byte{[]byte("a"), {}, []byte("b")}) {
+		t.Fatalf("unexpected qualifiers %q", col.Qualifier)
+	}
+	col.Family = append(col.Family, 'x')
+	col.Qualifier[0] = append(col.Qualifier[0], 'y')
+	col.Qualifier[1] = append(col.Qualifier[1], 'z')
+	if string(col.Qualifier[0]) != "ay" || string(col.Qualifier[2]) != "b" {
+		t.Fatalf("appending changed adjacent names: %q", col.Qualifier)
+	}
+}

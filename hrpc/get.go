@@ -148,11 +148,21 @@ func familiesToColumn(families map[string][]string) []*pb.Column {
 	counter := 0
 	for family, qualifiers := range families {
 		bytequals := make([][]byte, len(qualifiers))
+		size := len(family)
+		for _, qual := range qualifiers {
+			size += len(qual)
+		}
+		names := make([]byte, size)
+		offset := copy(names, family)
+		familyBytes := names[:offset:offset]
 		for i, qual := range qualifiers {
-			bytequals[i] = []byte(qual)
+			end := offset + copy(names[offset:], qual)
+			// Limit capacity so appending to a name cannot overwrite its neighbor.
+			bytequals[i] = names[offset:end:end]
+			offset = end
 		}
 		cols[counter] = &pb.Column{
-			Family:    []byte(family),
+			Family:    familyBytes,
 			Qualifier: bytequals,
 		}
 		counter++
